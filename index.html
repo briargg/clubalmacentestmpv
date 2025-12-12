@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>ClubAlmacén - Plataforma Fintech</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.20.0/firebase-firestore.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Header con controles de usuario -->
+    <header class="app-header" id="appHeader">
+        <div class="logo-container">
+            <img src="logo club almacen rojo.png" alt="ClubAlmacén Logo">
+            <h1 class="app-title">ClubAlmacén</h1>
+        </div>
+        <div class="user-controls" id="userControls">
+            <div class="user-info" id="userInfo">
+                <i class="fas fa-user-circle"></i>
+                <span id="userEmail">Usuario</span>
+                <div class="user-score" id="userScore">
+                    <span class="score-badge" id="scoreBadge">0 pts</span>
+                </div>
+            </div>
+            <button class="logout-btn" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i>
+                Cerrar Sesión
+            </button>
+        </div>
+    </header>
+
+    <!-- Notificación de pago exitoso -->
+    <div class="notification-overlay" id="paymentNotification" style="display: none;">
+        <div class="notification-content success">
+            <div class="notification-icon">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <h3>¡Felicidades!</h3>
+            <p id="notificationMessage">Pago realizado con éxito</p>
+            <p class="points-earned">+<span id="pointsEarned">10</span> puntos ganados</p>
+            <button class="btn btn-primary" onclick="closeNotification()">Continuar</button>
+        </div>
+    </div>
+
+    <!-- Contenedor de autenticación (solo visible sin sesión) -->
+    <div class="main-container">
+        <div class="auth-container" id="authContainer">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="fas fa-lock"></i>
+                        Acceso a la Plataforma
+                    </h2>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="email" class="form-control" placeholder="tu@email.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Contraseña</label>
+                    <input type="password" id="password" class="form-control" placeholder="••••••••" required>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn btn-primary" id="loginButton" style="width: 100%">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Iniciar Sesión
+                    </button>
+                    <p class="text-center mt-2">
+                        ¿No tienes cuenta? 
+                        <a href="#" id="toggleSignupLink" style="color: var(--primary);">Regístrate aquí</a>
+                    </p>
+                </div>
+                
+                <div id="signupSection" class="hidden">
+                    <div class="form-group">
+                        <button class="btn btn-secondary" id="signupButton" style="width: 100%">
+                            <i class="fas fa-user-plus"></i>
+                            Crear Cuenta
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="statusMessage" class="text-center mt-4"></div>
+            </div>
+        </div>
+
+        <!-- Dashboard Principal (visible con sesión) -->
+        <div id="mainDashboard" class="hidden">
+            <!-- Sección Cliente -->
+            <div id="clienteDashboard" class="hidden">
+                <!-- Scoring de crédito y estadísticas -->
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-chart-line"></i>
+                                Tu Scoring de Crédito
+                            </h2>
+                        </div>
+                        <div class="credit-scoring">
+                            <div class="score-meter">
+                                <div class="meter-bar">
+                                    <div class="meter-fill" id="scoreFill" style="width: 0%"></div>
+                                </div>
+                                <div class="score-labels">
+                                    <span class="score-label low">Bajo</span>
+                                    <span class="score-label medium">Medio</span>
+                                    <span class="score-label high">Alto</span>
+                                </div>
+                            </div>
+                            <div class="score-info">
+                                <div class="score-value" id="scoreValue">0</div>
+                                <div class="score-category" id="scoreCategory">Iniciando</div>
+                                <div class="score-description" id="scoreDescription">
+                                    ¡Comienza a usar crédito para mejorar tu scoring!
+                                </div>
+                            </div>
+                        </div>
+                        <div class="score-benefits" id="scoreBenefits">
+                            <div class="benefit-item locked">
+                                <i class="fas fa-shopping-cart"></i>
+                                <span>Compras básicas</span>
+                            </div>
+                            <div class="benefit-item locked">
+                                <i class="fas fa-tv"></i>
+                                <span>Electrodomésticos</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tarjeta de crédito -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-credit-card"></i>
+                                Tu Crédito Disponible
+                            </h2>
+                            <span class="card-badge" id="creditStatus">ACTIVO</span>
+                        </div>
+                        <div class="credit-card">
+                            <div class="stat-label">LÍMITE DISPONIBLE</div>
+                            <div class="credit-amount" id="totalCredit">$0.00</div>
+                            <div class="stat-label">EN TODOS LOS COMERCIOS</div>
+                        </div>
+                        <div class="credit-details">
+                            <div class="detail-item">
+                                <span>Usado:</span>
+                                <span id="creditUsed">$0.00</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>Disponible:</span>
+                                <span id="creditAvailable">$0.00</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline mt-4" id="refreshCreditBtn">
+                            <i class="fas fa-sync-alt"></i>
+                            Actualizar Crédito
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Realizar compra -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-shopping-cart"></i>
+                            Nueva Compra
+                        </h2>
+                    </div>
+                    <button class="btn btn-primary mb-4" id="startPurchaseBtn">
+                        <i class="fas fa-plus-circle"></i>
+                        Iniciar Compra
+                    </button>
+                    
+                    <div id="purchaseFlow" class="hidden">
+                        <div class="form-group">
+                            <label class="form-label">Categoría</label>
+                            <div class="category-buttons">
+                                <button class="btn btn-outline" data-category="almacen">
+                                    <i class="fas fa-store"></i> Almacén
+                                </button>
+                                <button class="btn btn-outline" data-category="verduleria">
+                                    <i class="fas fa-carrot"></i> Verdulería
+                                </button>
+                                <button class="btn btn-outline" data-category="carniceria">
+                                    <i class="fas fa-drumstick-bite"></i> Carnicería
+                                </button>
+                                <button class="btn btn-outline" data-category="farmacia">
+                                    <i class="fas fa-pills"></i> Farmacia
+                                </button>
+                                <button class="btn btn-outline" data-category="electrodomesticos" id="electroBtn" disabled>
+                                    <i class="fas fa-tv"></i> Electrodomésticos
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="merchantSection" class="hidden">
+                            <div class="form-group">
+                                <label class="form-label">Comerciante</label>
+                                <select id="comercianteSelect" class="form-control">
+                                    <option value="">Seleccionar Comerciante</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div id="itemsSection" class="hidden">
+                            <div class="form-group">
+                                <label class="form-label">Agregar Producto</label>
+                                <div class="items-form-grid">
+                                    <input type="text" id="itemName" class="form-control" placeholder="Nombre">
+                                    <input type="number" id="itemPrice" class="form-control" placeholder="Precio" step="0.01">
+                                    <input type="number" id="itemQuantity" class="form-control" placeholder="Cantidad" value="1">
+                                </div>
+                                <button class="btn btn-outline mt-2" id="addItemBtn" style="width: 100%">
+                                    <i class="fas fa-plus"></i> Agregar Producto
+                                </button>
+                            </div>
+                            
+                            <div class="purchase-list" id="itemsList"></div>
+                            
+                            <div class="text-center mt-4">
+                                <div class="purchase-total-display">
+                                    Total: $<span id="purchaseTotal">0.00</span>
+                                </div>
+                                <button class="btn btn-success mt-2" id="submitPurchaseBtn">
+                                    <i class="fas fa-paper-plane"></i> Enviar Compra
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Compras pendientes y aprobadas -->
+                <div class="dashboard-grid mt-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-clock"></i>
+                                Compras Pendientes
+                            </h2>
+                        </div>
+                        <div class="purchase-list" id="pendingPurchasesList">
+                            <div class="no-items">Cargando compras...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-check-circle"></i>
+                                Compras Aprobadas
+                            </h2>
+                        </div>
+                        <div class="purchase-list" id="approvedPurchasesList">
+                            <div class="no-items">Cargando compras...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historial de pagos -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-history"></i>
+                            Historial de Pagos
+                        </h2>
+                    </div>
+                    <div class="purchase-list" id="paymentHistoryList">
+                        <div class="no-items">Cargando historial...</div>
+                    </div>
+                </div>
+
+                <!-- Botón de pagar -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-money-check-alt"></i>
+                            Realizar Pago
+                        </h2>
+                    </div>
+                    <button class="btn btn-primary" id="payBtn">
+                        <i class="fas fa-credit-card"></i>
+                        Pagar Compras
+                    </button>
+                </div>
+                
+                <!-- Lista de créditos -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-hand-holding-usd"></i>
+                            Mis Líneas de Crédito
+                        </h2>
+                    </div>
+                    <div class="purchase-list" id="misFiados">
+                        <div class="no-items">Cargando créditos...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección Comerciante -->
+            <div id="comercianteDashboard" class="hidden">
+                <div class="dashboard-grid">
+                    <!-- Estadísticas -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-chart-line"></i>
+                                Estadísticas
+                            </h2>
+                        </div>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">PENDIENTES</div>
+                                <div class="stat-value" id="pendingCount">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">APROBADAS</div>
+                                <div class="stat-value text-success" id="approvedCount">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">TOTAL</div>
+                                <div class="stat-value" id="totalSales">$0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">PAGOS PEND.</div>
+                                <div class="stat-value text-warning" id="pendingPayments">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gestión de fiados -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">
+                                <i class="fas fa-hand-holding-usd"></i>
+                                Gestión de Crédito
+                            </h2>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Cliente</label>
+                            <select id="clienteSelectComerciante" class="form-control">
+                                <option value="">Seleccionar Cliente</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Monto de Crédito</label>
+                            <input type="number" id="montoFiado" class="form-control" placeholder="Ej: 5000" step="0.01">
+                        </div>
+                        <button class="btn btn-primary" id="habilitarFiadoBtn">
+                            <i class="fas fa-check-circle"></i>
+                            Habilitar Crédito
+                        </button>
+                        
+                        <div class="mt-4">
+                            <h3 class="card-title" style="font-size: 18px;">
+                                <i class="fas fa-users"></i>
+                                Clientes con Crédito
+                            </h3>
+                            <div class="purchase-list" id="clientesFiado">
+                                <div class="no-items">Cargando clientes...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Compras por aprobar -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-clipboard-check"></i>
+                            Compras por Aprobar
+                            <span class="card-badge" id="pendingBadge">0</span>
+                        </h2>
+                    </div>
+                    <div class="purchase-list" id="purchasesToApprove">
+                        <div class="no-items">Cargando compras...</div>
+                    </div>
+                </div>
+
+                <!-- Pagos por aprobar -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-money-bill-wave"></i>
+                            Pagos por Aprobar
+                            <span class="card-badge" id="pendingPaymentsBadge">0</span>
+                        </h2>
+                    </div>
+                    <div class="purchase-list" id="paymentsToApprove">
+                        <div class="no-items">Cargando pagos...</div>
+                    </div>
+                </div>
+
+                <!-- Compras aprobadas -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="fas fa-history"></i>
+                            Historial de Compras Aprobadas
+                        </h2>
+                    </div>
+                    <div class="purchase-list" id="approvedPurchasesMerchantList">
+                        <div class="no-items">Cargando compras...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de pago -->
+    <div class="modal-overlay" id="paymentModal">
+        <div class="modal-content">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-credit-card"></i>
+                    Seleccionar Método de Pago
+                </h2>
+                <button id="closePaymentModalBtn" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-light);">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Compra a Pagar</label>
+                <select id="purchaseToPaySelect" class="form-control">
+                    <option value="">Seleccionar Compra</option>
+                </select>
+                <div id="purchaseDetails" class="mt-2 hidden">
+                    <div class="purchase-summary">
+                        <p><strong>Total a pagar:</strong> $<span id="amountToPay">0.00</span></p>
+                        <p><strong>Comerciante:</strong> <span id="merchantToPay"></span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="payment-options">
+                <div class="payment-option" data-method="efectivo" id="efectivoOption">
+                    <div class="payment-icon">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <h3>Efectivo</h3>
+                    <p>Paga en efectivo al comerciante</p>
+                </div>
+                
+                <div class="payment-option" data-method="transferencia" id="transferenciaOption">
+                    <div class="payment-icon">
+                        <i class="fas fa-university"></i>
+                    </div>
+                    <h3>Transferencia</h3>
+                    <p>Transferencia bancaria o móvil</p>
+                </div>
+            </div>
+            
+            <div id="paymentDetailsSection" class="hidden">
+                <div class="form-group">
+                    <label class="form-label" id="paymentMethodLabel">Detalles del pago</label>
+                    <div id="efectivoDetails" class="hidden">
+                        <p>Acércate al comerciante para realizar el pago en efectivo.</p>
+                        <p>Recibirás un comprobante de pago.</p>
+                    </div>
+                    <div id="transferenciaDetails" class="hidden">
+                        <div class="form-group">
+                            <label class="form-label">Número de Comprobante</label>
+                            <input type="text" id="comprobanteNumber" class="form-control" placeholder="Ej: TRX-123456">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Monto a Pagar</label>
+                            <input type="number" id="paymentAmount" class="form-control" placeholder="0.00" step="0.01">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-4">
+                <button class="btn btn-primary" id="confirmPaymentBtn" disabled>
+                    <i class="fas fa-check"></i>
+                    Confirmar Pago
+                </button>
+                <button class="btn btn-outline mt-2" id="cancelPaymentBtn">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de aprobación de pago (para comerciante) -->
+    <div class="modal-overlay" id="approvePaymentModal" style="display: none;">
+        <div class="modal-content">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-check-circle"></i>
+                    Aprobar Pago
+                </h2>
+                <button onclick="closeApprovePaymentModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-light);">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div id="paymentApproveDetails">
+                <!-- Los detalles se cargan dinámicamente -->
+            </div>
+            
+            <div class="text-center mt-4">
+                <button class="btn btn-success" id="confirmApprovePaymentBtn">
+                    <i class="fas fa-check"></i>
+                    Aprobar Pago
+                </button>
+                <button class="btn btn-outline mt-2" onclick="closeApprovePaymentModal()">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de selección de rol -->
+    <div class="modal-overlay" id="roleModal" style="display: none;">
+        <div class="modal-content">
+            <h2 class="card-title mb-4">
+                <i class="fas fa-user-tag"></i>
+                Selecciona tu Rol
+            </h2>
+            <p class="mb-4">¿Cómo utilizarás la plataforma?</p>
+            <button class="btn btn-primary mb-2" id="selectClienteBtn">
+                <i class="fas fa-shopping-bag"></i> Cliente
+            </button>
+            <button class="btn btn-secondary" id="selectComercianteBtn">
+                <i class="fas fa-store"></i> Comerciante
+            </button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
